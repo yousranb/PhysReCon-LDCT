@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+# data and outputs (never committed)
+data/
+runs*/
+pr_runs/
+pr_calib/
+cadm_runs/
+results*/
+*.pt
+*.npy
+*.npz
+*.log
+*.done
+table1.csv

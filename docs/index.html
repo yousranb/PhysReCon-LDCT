@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PhysReCon-LDCT</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="PhysReCon-LDCT: physics-grounded multiscale degradation learning for few-shot adaptive low-dose CT synthesis.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<style>
+/* Layout: a single reading column (~70ch) with wide figure bands; a CT-viewer panel opens the page. */
+:root{
+  --bg:#f2f4f6; --surface:#ffffff; --fg:#161a1e; --muted:#59626c; --line:#d8dde3;
+  --phys:#2f6db5; --net:#2e7d4f; --adapt:#c95a14; --dom:#6a3fb0; --viewer:#0d1013; --viewer-fg:#e8ecef;
+  --chip:#e8edf2; --good:#2e7d4f;
+  --f-display:"IBM Plex Sans Condensed","Arial Narrow",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f1215; --surface:#171b20; --fg:#e6e9ec; --muted:#9aa4ae; --line:#2a3138;
+  --phys:#6ea3e6; --net:#5fb985; --adapt:#f0904d; --dom:#a888e0; --viewer:#07090b; --viewer-fg:#e8ecef;
+  --chip:#222930; --good:#5fb985; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1215; --surface:#171b20; --fg:#e6e9ec; --muted:#9aa4ae; --line:#2a3138;
+  --phys:#6ea3e6; --net:#5fb985; --adapt:#f0904d; --dom:#a888e0; --viewer:#07090b; --viewer-fg:#e8ecef;
+  --chip:#222930; --good:#5fb985; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font:16px/1.6 var(--f-body);-webkit-font-smoothing:antialiased}
+.wrap{max-width:1080px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.col{max-width:70ch}
+h1,h2,h3{font-family:var(--f-display);text-wrap:balance;margin:0;line-height:1.15}
+h1{font-size:clamp(2rem,4.6vw,3.2rem);font-weight:700;letter-spacing:-.01em}
+h2{font-size:1.65rem;font-weight:600}
+h3{font-size:1.1rem;font-weight:600}
+p{margin:0}
+a{color:var(--phys)}
+.eyebrow{font:500 .74rem/1 var(--f-mono);letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+section{padding-block:56px;border-top:1px solid var(--line)}
+section .head{display:flex;flex-direction:column;gap:10px;margin-bottom:26px}
+.lead{color:var(--muted);max-width:70ch}
+
+/* header */
+header{padding-block:44px 30px}
+header .wrap{display:flex;flex-direction:column;gap:18px}
+.subtitle{font-size:1.15rem;color:var(--muted);max-width:60ch}
+.authors{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:.98rem}
+.authors span{color:var(--muted)}
+.links{display:flex;flex-wrap:wrap;gap:10px}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:9px 15px;border-radius:999px;border:1px solid var(--line);
+  background:var(--surface);color:var(--fg);text-decoration:none;font:500 .9rem/1 var(--f-body);cursor:pointer}
+.btn:hover{border-color:var(--fg)}
+.btn.primary{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.btn[aria-disabled="true"]{opacity:.55;cursor:default}
+:focus-visible{outline:2px solid var(--phys);outline-offset:2px}
+
+/* viewer */
+.viewer{background:var(--viewer);color:var(--viewer-fg);border-radius:14px;padding:18px;display:grid;
+  grid-template-columns:minmax(0,520px) minmax(0,1fr);gap:24px;justify-content:start}
+.stage{position:relative;aspect-ratio:1/1;max-width:100%;border-radius:8px;overflow:hidden;user-select:none;touch-action:none;background:#000;cursor:ew-resize}
+.stage img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;image-rendering:auto}
+.stage .top{clip-path:inset(0 0 0 var(--cut,50%))}
+.stage .bar{position:absolute;top:0;bottom:0;left:var(--cut,50%);width:2px;background:#fff;transform:translateX(-1px);pointer-events:none}
+.stage .knob{position:absolute;top:50%;left:var(--cut,50%);width:34px;height:34px;border-radius:50%;background:#fff;color:#111;
+  transform:translate(-50%,-50%);display:grid;place-items:center;font:600 13px/1 var(--f-mono);pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,.4)}
+.tag{position:absolute;top:10px;padding:4px 8px;border-radius:4px;background:rgba(0,0,0,.62);font:500 .74rem/1.2 var(--f-mono);letter-spacing:.03em}
+.tag.l{left:10px}.tag.r{right:10px}
+.panel{display:flex;flex-direction:column;gap:16px;min-width:0}
+.panel label{font:500 .72rem/1 var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:#9aa6b1}
+.seg{display:flex;flex-wrap:wrap;gap:6px}
+.seg button{border:1px solid #39424b;background:transparent;color:var(--viewer-fg);border-radius:6px;padding:6px 9px;font:500 .82rem/1.1 var(--f-body);cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--viewer-fg);color:#111;border-color:var(--viewer-fg)}
+.viewer .note{font-size:.82rem;color:#9aa6b1;line-height:1.5}
+.window{font:400 .78rem/1.4 var(--f-mono);color:#9aa6b1}
+
+/* abstract + stats */
+.abstract{display:grid;grid-template-columns:minmax(0,1fr) 250px;gap:40px;align-items:start}
+.abstract p+p{margin-top:14px}
+.stats{display:grid;gap:0;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+.stat{padding:14px 16px;display:flex;flex-direction:column;gap:2px}
+.stat+.stat{border-top:1px solid var(--line)}
+.stat b{font:600 1.5rem/1.1 var(--f-display)}
+.stat span{font-size:.85rem;color:var(--muted)}
+
+/* method */
+.figure{background:#fff;border:1px solid var(--line);border-radius:10px;padding:14px;overflow-x:auto}
+.figure img{display:block;width:100%;min-width:640px;height:auto}
+.caption{font-size:.88rem;color:var(--muted);margin-top:10px;max-width:90ch}
+.steps{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:22px}
+.step{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:6px;border-top:3px solid var(--c)}
+.step p{font-size:.94rem;color:var(--muted)}
+.step h3{color:var(--c)}
+
+/* controls (light) */
+.controls{display:flex;flex-wrap:wrap;gap:14px 22px;align-items:center;margin-bottom:16px}
+.controls .grp{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.controls .grp>span{font:500 .72rem/1 var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.pills{display:flex;flex-wrap:wrap;gap:4px;background:var(--chip);padding:3px;border-radius:8px}
+.pills button{border:0;background:transparent;color:var(--fg);padding:6px 10px;border-radius:6px;font:500 .85rem/1.1 var(--f-body);cursor:pointer}
+.pills button[aria-pressed="true"]{background:var(--surface);box-shadow:0 1px 2px rgba(0,0,0,.12)}
+
+/* charts */
+.chart{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 10px 6px;overflow-x:auto}
+.chart svg{display:block;width:100%;height:auto;min-width:520px}
+.chart text{fill:var(--fg);font-family:var(--f-body)}
+.chart .ax{fill:var(--muted);font-family:var(--f-mono);font-size:11px}
+.legend{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:.85rem;color:var(--muted);margin-top:12px}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px}
+.callout{margin-top:16px;padding:14px 16px;border-left:3px solid var(--phys);background:var(--surface);border-radius:0 8px 8px 0;font-size:.94rem;max-width:90ch}
+
+/* table */
+.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--surface);margin-top:18px}
+table{border-collapse:collapse;width:100%;font-size:.88rem;min-width:760px}
+th,td{padding:7px 10px;text-align:right;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+thead th{font:500 .75rem/1.2 var(--f-mono);color:var(--muted);border-bottom:1px solid var(--line)}
+tbody td{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+tbody td:first-child{font-family:var(--f-body)}
+tr.blk td{font:italic 400 .85rem/1.2 var(--f-body);color:var(--muted);padding-top:14px;text-align:left}
+td.best{font-weight:600;color:var(--good)}
+tr.ours td:first-child{font-weight:600}
+td.sep,th.sep{border-left:1px solid var(--line)}
+
+/* gallery */
+.gallery{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px}
+.gallery figure{margin:0;display:flex;flex-direction:column;gap:6px;min-width:0}
+.gallery img{width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:6px;background:#000;display:block;cursor:zoom-in}
+.gallery figcaption{font-size:.8rem;color:var(--muted);text-align:center}
+.gallery figure.ours figcaption{color:var(--fg);font-weight:600}
+dialog{border:0;padding:0;background:transparent;max-width:min(92vw,720px)}
+dialog::backdrop{background:rgba(0,0,0,.8)}
+dialog img{width:100%;border-radius:8px;display:block}
+dialog p{color:#fff;text-align:center;margin-top:8px;font-size:.9rem}
+
+/* bibtex */
+pre{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px;overflow-x:auto;font:400 .82rem/1.55 var(--f-mono);margin:0}
+.bibrow{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:10px;flex-wrap:wrap}
+footer{padding-block:34px 50px;border-top:1px solid var(--line);color:var(--muted);font-size:.85rem}
+
+@media (max-width:900px){
+  .viewer{grid-template-columns:minmax(0,1fr)}
+  .abstract{grid-template-columns:minmax(0,1fr)}
+  .stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .stat+.stat{border-top:0}
+  .stat:nth-child(n+3){border-top:1px solid var(--line)}
+  .stat:nth-child(even){border-left:1px solid var(--line)}
+  .two{grid-template-columns:minmax(0,1fr)}
+  .gallery{grid-template-columns:repeat(4,minmax(0,1fr))}
+}
+@media (max-width:560px){
+  .steps{grid-template-columns:minmax(0,1fr)}
+  .gallery{grid-template-columns:repeat(2,minmax(0,1fr))}
+  section{padding-block:40px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+
+<header>
+  <div class="wrap">
+    <span class="eyebrow">ISBI 2026 · under review</span>
+    <h1>PhysReCon-LDCT</h1>
+    <p class="subtitle">Physics-grounded multiscale degradation learning for few-shot adaptive low-dose CT synthesis</p>
+    <div class="authors"><strong>Yousra Taifour</strong><span>L2TI, Université Sorbonne Paris Nord</span></div>
+    <div class="links">
+      <a class="btn" aria-disabled="true" title="Available after the review">Paper (coming soon)</a>
+      <a class="btn primary" href="https://github.com/your-github-username/PhysReCon-LDCT" target="_blank" rel="noopener">Code</a>
+      <a class="btn" href="#bibtex">BibTeX</a>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="viewer" id="viewer">
+    <div class="stage" id="stage" role="slider" tabindex="0" aria-label="Comparison divider" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50">
+      <img id="imgL" alt="">
+      <img id="imgR" class="top" alt="">
+      <div class="bar"></div><div class="knob">⇔</div>
+      <span class="tag l" id="tagL"></span><span class="tag r" id="tagR"></span>
+    </div>
+    <div class="panel">
+      <div><label>Left image</label><div class="seg" id="segL" style="margin-top:8px"></div></div>
+      <div><label>Right image</label><div class="seg" id="segR" style="margin-top:8px"></div></div>
+      <div><label>View</label><div class="seg" id="segV" style="margin-top:8px"></div></div>
+      <p class="note">Drag the divider or use the arrow keys. All images show the same Norsvin IR test slice; “Real LDCT” is the scanner's own low-dose acquisition.</p>
+      <p class="window">window [−100, 200] HU</p>
+    </div>
+  </div>
+</div>
+
+<section id="abstract">
+  <div class="wrap abstract">
+    <div class="col">
+      <div class="head"><span class="eyebrow">Abstract</span></div>
+      <!-- Replace with the final abstract of the paper. -->
+      <p>Simulating low-dose CT (LDCT) from normal-dose acquisitions is needed to develop and evaluate dose-reduction methods, but the noise of a real LDCT image depends on the scanner and, above all, on its reconstruction algorithm. Image-domain generative models learn this appearance from data for each dose and each scanner, and they do not transfer to a new reconstruction.</p>
+      <p>PhysReCon-LDCT separates what physics determines from what must be learned. Dose-dependent projection noise is generated on the sinogram and reconstructed by filtered back-projection. A 0.23&nbsp;M-parameter network, shared across the scales of an undecimated wavelet transform and guided by the anatomy, learns how a given reconstruction transforms this noise. A degradation embedding estimated from paired support slices conditions the transformation, so that adapting to a new domain updates only 28&nbsp;k parameters.</p>
+      <p>On pig CT reconstructed with iterative reconstruction at 10&nbsp;% and 25&nbsp;% dose, PhysReCon-LDCT trained on the target scanner gives the lowest noise-level error, HU bias and LPIPS at 10&nbsp;% among models trained on the same data, and the best result on four of five metrics at 25&nbsp;%. Among models trained on a different dataset and transferred to this one, the adapted PhysReCon-LDCT has the lowest NPS errors at both doses.</p>
+    </div>
+    <div class="stats" aria-label="Key figures">
+      <div class="stat"><b class="mono">0.23 M</b><span>parameters, one model for all doses</span></div>
+      <div class="stat"><b class="mono">28 k</b><span>parameters updated for a new domain</span></div>
+      <div class="stat"><b class="mono">≈ 7 min</b><span>adaptation on one A100, synthesis included</span></div>
+      <div class="stat"><b class="mono">282</b><span>test slices per dose, same for every method</span></div>
+    </div>
+  </div>
+</section>
+
+<section id="method">
+  <div class="wrap">
+    <div class="head"><span class="eyebrow">Method</span><h2>Physics gives the noise, the network learns the reconstruction</h2></div>
+    <div class="figure"><img src="assets/arch.webp" alt="PhysReCon-LDCT architecture: physics prior, multiscale reconstruction response, signal transfer and degradation embedding" loading="lazy"></div>
+    <p class="caption">Blue: fixed physics. Green: trained once on the source domain, then frozen. Dashed orange: adapted per target domain. Purple: conditioning by the degradation embedding z<sub>𝒟</sub>.</p>
+    <div class="steps">
+      <div class="step" style="--c:var(--phys)"><h3>Physics prior</h3><p>Incremental dose noise ε<sub>d</sub> ~ 𝒩(0, σ²<sub>d</sub>(p)) is drawn on the sinogram of the normal-dose image, re-weighted ray-wise and reconstructed by FBP. Only the noise is reconstructed. I<sub>0</sub>, σ<sub>e</sub>² and the FBP kernel are calibrated once on piglet FBP data.</p></div>
+      <div class="step" style="--c:var(--net)"><h3>Multiscale reconstruction response</h3><p>An undecimated Haar transform splits the physics noise into 3 scales × 3 orientations. One CNN with weights shared across scales (conv, four FiLM-modulated residual units, conv; dilation 2<sup>j</sup>) corrects every band, coarse to fine, guided by the NDCT subbands. Band gains γ<sub>j</sub> then rescale the corrected noise.</p></div>
+      <div class="step" style="--c:var(--adapt)"><h3>Signal transfer</h3><p>An edge-aware filter S<sub>η</sub> followed by a resolution adjustment 𝒢<sub>σ</sub> reproduces the contrast and sharpness of the target reconstruction. Signal and noise stay on separate paths and are added at the end.</p></div>
+      <div class="step" style="--c:var(--dom)"><h3>Degradation embedding</h3><p>For each paired support slice, the noise statistics of the real LDCT are compared with those of NDCT + physics noise (ΔΦ<sub>i</sub>). A permutation-invariant encoder (MLP, mean, FC&nbsp;16) turns them into z<sub>𝒟</sub>, which conditions every adapted module.</p></div>
+    </div>
+    <p class="callout">Every loss term compares statistics of the synthetic image with <strong>real</strong> LDCT: tissue-wise NPS, multiscale covariance, texture sliced-Wasserstein distance and signal transfer. No pixel loss is computed between independent noise realizations. Loss weights were fixed a priori and not tuned.</p>
+  </div>
+</section>
+
+<section id="results">
+  <div class="wrap">
+    <div class="head"><span class="eyebrow">Results · Norsvin IR</span><h2>Fidelity to the real low-dose scanner</h2>
+      <p class="lead">One evaluation for all methods, 282 test slices per dose, real LDCT as reference. Errors: lower is better. Choose a metric and a dose; bars are grouped by training data.</p></div>
+    <div class="controls">
+      <div class="grp"><span>Dose</span><div class="pills" id="rDose"></div></div>
+      <div class="grp"><span>Metric</span><div class="pills" id="rMetric"></div></div>
+      <div class="grp"><label class="btn" style="padding:6px 12px"><input type="checkbox" id="rLog" checked style="margin:0 6px 0 0">log scale</label></div>
+    </div>
+    <div class="chart" id="resChart"></div>
+    <div class="legend"><span><i style="background:var(--phys)"></i>PhysReCon-LDCT</span><span><i style="background:var(--muted)"></i>other methods</span></div>
+    <div class="tablewrap"><table id="resTable"></table></div>
+    <p class="caption">NPS<sub>e</sub>: NPS magnitude error; NPS<sub>s</sub>: NPS shape error; σ<sub>e</sub>: noise-level error; HU: absolute HU bias; LP: LPIPS. Best per block in green. Baselines trained on Norsvin are trained from scratch, one model per dose. Zero-shot rows are applied to Norsvin unchanged; the few-shot row updates ≈28&nbsp;k parameters using the Norsvin training pigs.</p>
+    <p class="callout">Trained on the same target data, PhysReCon-LDCT has the lowest noise-level error, HU bias and LPIPS at 10&nbsp;%, and the best result on four of five metrics at 25&nbsp;%. PhysHVS-LDCT keeps the best NPS at 10&nbsp;%. Transferred from piglet without adaptation, PhysHVS-LDCT shows a 45 HU bias and PhysReCon an NPS error about 30 times larger than after adaptation. The adapted PhysReCon has the lowest NPS errors of the transferred models, comparable to the model trained on Norsvin from scratch (better at 25 %), but a larger noise-level error and HU bias at 10 %.</p>
+  </div>
+</section>
+
+<section id="fewshot">
+  <div class="wrap">
+    <div class="head"><span class="eyebrow">Few-shot adaptation · piglet ASIR40</span><h2>A held-out reconstruction from a handful of slices</h2>
+      <p class="lead">ASIR40 is never seen during source training. Support units are blocks of 10 consecutive slices from the training part; k = 0 is zero-shot. Points show the mean over 2 random draws of the support set, bars the range ±1 s.d.</p></div>
+    <div class="controls"><div class="grp"><span>Dose</span><div class="pills" id="fDose"></div></div></div>
+    <div class="chart" id="fsChart"></div>
+    <div class="legend">
+      <span><i style="background:var(--dom)"></i>embedding z only (no gradient)</span>
+      <span><i style="background:var(--adapt)"></i>z + domain parameters (28 k)</span>
+      <span><i style="background:var(--muted)"></i>zero-shot (k = 0)</span>
+      <span><i style="background:var(--net)"></i>trained from scratch on k = 10</span>
+    </div>
+  </div>
+</section>
+
+<section id="ablation">
+  <div class="wrap">
+    <div class="head"><span class="eyebrow">Ablation · Norsvin IR</span><h2>What each component contributes</h2>
+      <p class="lead">Controlled ablation: the same source checkpoint, the same adaptation protocol (600 steps, early stopping on a held-out support pig) and 3 seeds for every configuration. Dots show the mean, lines ±1 s.d.</p></div>
+    <div class="controls">
+      <div class="grp"><span>Dose</span><div class="pills" id="aDose"></div></div>
+      <div class="grp"><span>Metric</span><div class="pills" id="aMetric"></div></div>
+    </div>
+    <div class="chart" id="abChart"></div>
+    <p class="callout" id="abNote"></p>
+  </div>
+</section>
+
+<section id="gallery">
+  <div class="wrap">
+    <div class="head"><span class="eyebrow">Qualitative</span><h2>Same slice, every method</h2>
+      <p class="lead">Norsvin IR test slice. Click an image to enlarge it.</p></div>
+    <div class="controls"><div class="grp"><span>View</span><div class="pills" id="gView"></div></div></div>
+    <div class="gallery" id="gal"></div>
+  </div>
+</section>
+
+<section id="bibtex">
+  <div class="wrap">
+    <div class="bibrow"><h2>BibTeX</h2><button class="btn" id="copyBib" type="button">Copy</button></div>
+    <pre id="bib">@inproceedings{taifour2026physrecon,
+  title     = {PhysReCon-LDCT: Physics-Grounded Multiscale Degradation Learning
+               for Few-Shot Adaptive Low-Dose CT Synthesis},
+  author    = {Taifour, Yousra and others},
+  booktitle = {IEEE International Symposium on Biomedical Imaging (ISBI)},
+  year      = {2026},
+  note      = {under review}
+}</pre>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">Experiments were carried out on the Grid'5000 testbed. </div>
+</footer>
+
+<dialog id="dlg"><img id="dlgImg" alt=""><p id="dlgCap"></p></dialog>
+
+<script>
+(function(){
+const $=s=>document.querySelector(s);
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const M=[["ndct","NDCT"],["real","Real LDCT"],["cyclegan","CycleGAN"],["cut","CUT"],["cvae","cVAE"],["physhvs","PhysHVS-LDCT"],["physrecon","PhysReCon"]];
+const V=[["10full","10 % · full"],["10zoom","10 % · zoom"],["25zoom","25 % · zoom"]];
+const src=(v,m)=>`assets/q_${v}_${m}.webp`;
+function pills(el,opts,cur,cb,dark){el.innerHTML="";opts.forEach(([k,l])=>{const b=document.createElement("button");b.type="button";b.textContent=l;b.setAttribute("aria-pressed",k===cur);b.onclick=()=>{[...el.children].forEach(c=>c.setAttribute("aria-pressed","false"));b.setAttribute("aria-pressed","true");cb(k)};el.appendChild(b)});}
+
+/* ---------- comparison viewer ---------- */
+const st={L:"real",R:"physrecon",V:"10zoom",cut:50};
+function draw(){
+  $("#imgL").src=src(st.V,st.L);$("#imgR").src=src(st.V,st.R);
+  $("#imgL").alt=M.find(m=>m[0]===st.L)[1];$("#imgR").alt=M.find(m=>m[0]===st.R)[1];
+  $("#tagL").textContent=M.find(m=>m[0]===st.L)[1];$("#tagR").textContent=M.find(m=>m[0]===st.R)[1];
+  $("#stage").style.setProperty("--cut",st.cut+"%");$("#stage").setAttribute("aria-valuenow",Math.round(st.cut));
+}
+pills($("#segL"),M,st.L,k=>{st.L=k;draw()});pills($("#segR"),M,st.R,k=>{st.R=k;draw()});pills($("#segV"),V,st.V,k=>{st.V=k;draw()});
+const stage=$("#stage");let drag=false;
+const setX=e=>{const r=stage.getBoundingClientRect();st.cut=Math.max(0,Math.min(100,(e.clientX-r.left)/r.width*100));draw()};
+stage.addEventListener("pointerdown",e=>{drag=true;stage.setPointerCapture(e.pointerId);setX(e)});
+stage.addEventListener("pointermove",e=>{if(drag)setX(e)});
+stage.addEventListener("pointerup",()=>drag=false);
+stage.addEventListener("keydown",e=>{if(e.key==="ArrowLeft"){st.cut=Math.max(0,st.cut-4);draw();e.preventDefault()}if(e.key==="ArrowRight"){st.cut=Math.min(100,st.cut+4);draw();e.preventDefault()}});
+draw();
+
+/* ---------- results ---------- */
+const MET=[["nps_e","NPS magnitude error"],["nps_s","NPS shape error"],["sig","noise-level error"],["hu","HU bias"],["lp","LPIPS"]];
+const SH={nps_e:"NPS<sub>e</sub>",nps_s:"NPS<sub>s</sub>",sig:"σ<sub>e</sub>",hu:"HU",lp:"LP"};
+const R={10:{cyclegan:[.539,.276,.110,3.761,.175],cut:[.575,.287,.150,3.625,.170],vae:[4.185,.182,1.214,9.803,.300],physhvs:[.195,.033,.150,4.873,.231],scratch:[.198,.096,.048,2.298,.154],
+             cut_p:[.610,.284,.152,4.235,.168],physhvs_p:[.622,.291,.145,44.726,.375],zero:[7.720,.325,1.290,4.449,.235],fewshot:[.251,.088,.140,3.783,.174]},
+         25:{cyclegan:[.274,.133,.081,2.502,.120],cut:[.192,.095,.058,2.240,.112],vae:[11.025,.110,2.147,3.758,.330],physhvs:[.153,.080,.135,3.612,.223],scratch:[.126,.061,.053,1.611,.115],
+             cut_p:[.164,.081,.049,1.702,.112],physhvs_p:[.329,.164,.174,46.448,.368],zero:[3.783,.208,.540,1.669,.183],fewshot:[.110,.043,.070,1.894,.142]}};
+const BL=[["Trained on Norsvin",[["cyclegan","CycleGAN"],["cut","CUT"],["vae","cVAE"],["physhvs","PhysHVS-LDCT"],["scratch","PhysReCon (scratch)",1]]],
+          ["Trained on piglet, applied to Norsvin",[["cut_p","CUT, zero-shot"],["physhvs_p","PhysHVS-LDCT, zero-shot"],["zero","PhysReCon, zero-shot",1],["fewshot","PhysReCon, few-shot",1]]]];
+const fmt=v=>v>=10?v.toFixed(1):v>=1?v.toFixed(2):v.toFixed(3).replace(/^0/,"");
+const rs={d:"10",m:0,log:true};
+function resTable(){
+  let h=`<thead><tr><th></th>${["10","25"].map(d=>`<th class="sep" colspan="5" style="text-align:center">${d} %</th>`).join("")}</tr><tr><th>Method</th>${["10","25"].map(()=>MET.map((m,i)=>`<th class="${i?"":"sep"}">${SH[m[0]]}</th>`).join("")).join("")}</tr></thead><tbody>`;
+  BL.forEach(([bn,rows])=>{
+    h+=`<tr class="blk"><td colspan="11">${bn}</td></tr>`;
+    rows.forEach(([k,n,o])=>{
+      h+=`<tr class="${o?"ours":""}"><td>${n}</td>`;
+      ["10","25"].forEach(d=>MET.forEach((_,i)=>{const v=R[d][k][i];const best=Math.min(...rows.map(r=>R[d][r[0]][i]));h+=`<td class="${i?"":"sep"} ${v===best?"best":""}">${fmt(v)}</td>`}));
+      h+="</tr>";});});
+  $("#resTable").innerHTML=h+"</tbody>";
+}
+function resChart(){
+  const W=860,rowH=26,gapB=30,padL=190,padR=70,top=10;
+  const rows=[];BL.forEach(([bn,rr],bi)=>{rows.push({hdr:bn});rr.forEach(r=>rows.push({k:r[0],n:r[1],o:r[2]}))});
+  const H=top+rows.length*rowH+34;
+  const vals=rows.filter(r=>r.k).map(r=>R[rs.d][r.k][rs.m]);
+  const vmax=Math.max(...vals),vmin=Math.min(...vals);
+  const lg=rs.log;const lo=lg?Math.pow(10,Math.floor(Math.log10(vmin))):0;const hi=lg?Math.pow(10,Math.ceil(Math.log10(vmax))):niceMax(vmax);
+  const X=v=>padL+(lg?(Math.log10(v)-Math.log10(lo))/(Math.log10(hi)-Math.log10(lo)):(v-lo)/(hi-lo))*(W-padL-padR);
+  let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Bar chart of ${MET[rs.m][1]} at ${rs.d}% dose">`;
+  const ticks=lg?range(Math.log10(lo),Math.log10(hi)).map(e=>Math.pow(10,e)):ticksOf(vmax);
+  ticks.forEach(t=>{s+=`<line x1="${X(t)}" x2="${X(t)}" y1="${top}" y2="${H-26}" stroke="${css("--line")}" stroke-width="1"/><text class="ax" x="${X(t)}" y="${H-10}" text-anchor="middle">${fmtT(t)}</text>`});
+  let y=top;
+  rows.forEach(r=>{
+    if(r.hdr){s+=`<text x="4" y="${y+17}" font-size="12" font-style="italic" fill="${css("--muted")}">${r.hdr}</text>`;y+=rowH;return}
+    const v=R[rs.d][r.k][rs.m];const col=r.o?css("--phys"):css("--muted");
+    s+=`<text x="${padL-10}" y="${y+16}" text-anchor="end" font-size="13" ${r.o?'font-weight="600"':""}>${r.n}</text>`;
+    s+=`<rect x="${padL}" y="${y+5}" width="${Math.max(1,X(v)-padL)}" height="${rowH-10}" rx="3" fill="${col}" opacity="${r.o?1:.55}"/>`;
+    s+=`<text class="ax" x="${X(v)+6}" y="${y+16}">${fmt(v)}</text>`;
+    y+=rowH;});
+  $("#resChart").innerHTML=s+"</svg>";
+}
+function nice(v){const r=v/5,p=Math.pow(10,Math.floor(Math.log10(r)));const st=[1,2,2.5,5,10].map(m=>m*p).find(x=>x>=r);return {hi:Math.ceil(v/st-1e-9)*st,step:st}}
+function niceMax(v){return nice(v).hi}
+function ticksOf(v){const n=nice(v);const o=[];for(let t=0;t<=n.hi+1e-9;t+=n.step)o.push(+t.toFixed(10));return o}
+function range(a,b){const o=[];for(let i=a;i<=b;i++)o.push(i);return o}
+function fmtT(t){return t===0?"0":t>=10?String(+t.toFixed(0)):t>=1?String(+t.toFixed(2)):String(+t.toPrecision(2))}
+pills($("#rDose"),[["10","10 %"],["25","25 %"]],"10",k=>{rs.d=k;resChart()});
+pills($("#rMetric"),MET.map((m,i)=>[i,m[1]]),0,k=>{rs.m=k;resChart()});
+$("#rLog").onchange=e=>{rs.log=e.target.checked;resChart()};
+resTable();resChart();
+
+/* ---------- few-shot ---------- */
+const FS={5:{z:[[1,56.34,10.64],[3,50.86,10.35],[10,52.86,2.07]],zf:[[1,42.61,35.08],[3,51.79,.37],[10,51.12,13.82]],zero:106.63,scr:[51.13,1.40]},
+          10:{z:[[1,23.05,5.68],[3,20.12,5.54],[10,21.18,1.09]],zf:[[1,21.11,12.64],[3,23.18,3.79],[10,20.67,4.75]],zero:49.77,scr:[23.86,.18]},
+          25:{z:[[1,16.83,2.79],[3,15.38,2.72],[10,15.85,.51]],zf:[[1,11.87,1.62],[3,17.15,2.71],[10,14.79,1.44]],zero:28.89,scr:[15.51,3.10]}};
+let fd="10";
+function fsChart(){
+  const W=760,H=330,pl=64,pr=24,pt=18,pb=46;const d=FS[fd];
+  const xs=[0,1,3,10];const XP=k=>pl+xs.indexOf(k)/(xs.length-1)*(W-pl-pr);
+  const all=[d.zero,d.scr[0]+d.scr[1],...d.z.map(p=>p[1]+p[2]),...d.zf.map(p=>p[1]+p[2])];
+  const ymax=niceMax(Math.max(...all));const Y=v=>pt+(1-Math.max(0,v)/ymax)*(H-pt-pb);
+  let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="NPS error versus number of support blocks at ${fd}% dose">`;
+  ticksOf(Math.max(...all)).forEach(t=>{s+=`<line x1="${pl}" x2="${W-pr}" y1="${Y(t)}" y2="${Y(t)}" stroke="${css("--line")}"/><text class="ax" x="${pl-8}" y="${Y(t)+4}" text-anchor="end">${fmtT(t)}</text>`});
+  xs.forEach(k=>s+=`<text class="ax" x="${XP(k)}" y="${H-pb+20}" text-anchor="middle">${k}</text>`);
+  s+=`<text class="ax" x="${(pl+W-pr)/2}" y="${H-8}" text-anchor="middle">support blocks k (10 slices each)</text>`;
+  s+=`<text class="ax" transform="translate(14 ${(pt+H-pb)/2}) rotate(-90)" text-anchor="middle">NPS MAE (HU²·mm²)</text>`;
+  const series=(pts,col,off)=>{let p="";pts.forEach(([k,m,sd])=>{const x=XP(k)+off;p+=`<line x1="${x}" x2="${x}" y1="${Y(m-sd)}" y2="${Y(m+sd)}" stroke="${col}" stroke-width="1.5"/>`});
+    const path=[[0,d.zero],...pts.map(q=>[q[0],q[1]])].map(([k,m],i)=>`${i?"L":"M"}${XP(k)+(k?off:0)} ${Y(m)}`).join(" ");
+    p=`<path d="${path}" fill="none" stroke="${col}" stroke-width="2"/>`+p;pts.forEach(([k,m])=>p+=`<circle cx="${XP(k)+off}" cy="${Y(m)}" r="4.5" fill="${col}"/>`);return p};
+  s+=series(d.z,css("--dom"),-6)+series(d.zf,css("--adapt"),6);
+  s+=`<circle cx="${XP(0)}" cy="${Y(d.zero)}" r="5" fill="${css("--muted")}"/><text class="ax" x="${XP(0)+10}" y="${Y(d.zero)+4}">zero-shot ${d.zero.toFixed(1)}</text>`;
+  const sx=XP(10)+16;s+=`<line x1="${sx}" x2="${sx}" y1="${Y(d.scr[0]-d.scr[1])}" y2="${Y(d.scr[0]+d.scr[1])}" stroke="${css("--net")}" stroke-width="1.5"/><rect x="${sx-4.5}" y="${Y(d.scr[0])-4.5}" width="9" height="9" fill="${css("--net")}"/>`;
+  $("#fsChart").innerHTML=s+"</svg>";
+}
+pills($("#fDose"),[["5","5 %"],["10","10 %"],["25","25 %"]],"10",k=>{fd=k;fsChart()});
+fsChart();
+
+/* ---------- ablation ---------- */
+const AB={full:"Full model",noRSW:"no ray-wise weighting",noAnat:"no anatomy guidance",noST:"no signal transfer",noCond:"no domain conditioning"};
+const AD={10:{nps_e:{full:[.2718,.0743],noRSW:[.3387,.0228],noAnat:[.2536,.0455],noST:[.2238,.0455],noCond:[.1939,.0534]},
+              nps_s:{full:[.0845,.0036],noRSW:[.1415,.0112],noAnat:[.0945,.0116],noST:[.0680,.0063],noCond:[.0911,.0066]},
+              lp:{full:[.1726,.0015],noRSW:[.1598,.0029],noAnat:[.1506,.0162],noST:[.1721,.0045],noCond:[.1470,.0006]}},
+          25:{nps_e:{full:[.1086,.0392],noRSW:[.1113,.0279],noAnat:[.2294,.0691],noST:[.0913,.0457],noCond:[.1832,.0124]},
+              nps_s:{full:[.0390,.0173],noRSW:[.0470,.0065],noAnat:[.0342,.0057],noST:[.0307,.0125],noCond:[.0231,.0057]},
+              lp:{full:[.1406,.0034],noRSW:[.1202,.0015],noAnat:[.1173,.0056],noST:[.1521,.0027],noCond:[.1084,.0005]}}};
+const AM=[["nps_e","NPS magnitude error"],["nps_s","NPS shape error"],["lp","LPIPS"]];
+const NOTES={nps_e:"NPS magnitude: removing the domain conditioning or the anatomy guidance increases the error at 25 % (0.18 and 0.23 vs 0.11). At 10 % the full model varies strongly between seeds (0.27 ± 0.07), and every variant lies within about one s.d. of it.",
+             nps_s:"NPS shape: removing ray-wise weighting gives the largest increase at 10 % (0.14 vs 0.085, worse in 3 of 3 paired seeds). At 25 %, all variants lie within the full model's spread (0.039 ± 0.017).",
+             lp:"LPIPS: the variants without RSW, anatomy guidance or domain conditioning have a lower LPIPS than the full model. Texture fidelity is measured by the NPS errors; LPIPS is reported as a complementary perceptual distance."};
+const ab={d:"10",m:"nps_e"};
+function abChart(){
+  const W=760,rowH=40,pl=200,pr=125,pt=12,pb=40;const keys=Object.keys(AB);const H=pt+keys.length*rowH+pb;const d=AD[ab.d][ab.m];
+  const vm=Math.max(...keys.map(k=>d[k][0]+d[k][1]));const mx=niceMax(vm);const X=v=>pl+Math.max(0,v)/mx*(W-pl-pr);
+  let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Ablation ${ab.m} at ${ab.d}% dose">`;
+  ticksOf(vm).forEach(t=>{s+=`<line x1="${X(t)}" x2="${X(t)}" y1="${pt}" y2="${H-pb+6}" stroke="${css("--line")}"/><text class="ax" x="${X(t)}" y="${H-pb+22}" text-anchor="middle">${fmtT(t)}</text>`});
+  s+=`<line x1="${X(d.full[0])}" x2="${X(d.full[0])}" y1="${pt}" y2="${H-pb+6}" stroke="${css("--phys")}" stroke-dasharray="4 3"/>`;
+  keys.forEach((k,i)=>{const y=pt+i*rowH+rowH/2;const [m,sd]=d[k];const col=k==="full"?css("--phys"):css("--fg");
+    s+=`<text x="${pl-12}" y="${y+4}" text-anchor="end" font-size="13" ${k==="full"?'font-weight="600"':""}>${AB[k]}</text>`;
+    s+=`<line x1="${X(m-sd)}" x2="${X(m+sd)}" y1="${y}" y2="${y}" stroke="${col}" stroke-width="2" opacity=".55"/><circle cx="${X(m)}" cy="${y}" r="6" fill="${col}"/>`;
+    s+=`<text class="ax" x="${W-8}" y="${y+4}" text-anchor="end">${m.toFixed(3)} ± ${sd.toFixed(3)}</text>`;});
+  $("#abChart").innerHTML=s+"</svg>";$("#abNote").textContent=NOTES[ab.m];
+}
+pills($("#aDose"),[["10","10 %"],["25","25 %"]],"10",k=>{ab.d=k;abChart()});
+pills($("#aMetric"),AM,"nps_e",k=>{ab.m=k;abChart()});
+abChart();
+
+/* ---------- gallery ---------- */
+let gv="10zoom";
+function gal(){$("#gal").innerHTML=M.map(([k,n])=>`<figure class="${k==="physrecon"?"ours":""}"><img src="${src(gv,k)}" alt="${n}, ${V.find(v=>v[0]===gv)[1]}" data-cap="${n} · ${V.find(v=>v[0]===gv)[1]}"><figcaption>${n}</figcaption></figure>`).join("");
+  [...$("#gal").querySelectorAll("img")].forEach(im=>im.onclick=()=>{$("#dlgImg").src=im.src;$("#dlgImg").alt=im.alt;$("#dlgCap").textContent=im.dataset.cap;try{$("#dlg").showModal()}catch(e){}});}
+$("#dlg").addEventListener("click",()=>$("#dlg").close());
+pills($("#gView"),V,gv,k=>{gv=k;gal()});gal();
+
+/* ---------- bibtex ---------- */
+$("#copyBib").onclick=async()=>{const t=$("#bib").textContent;try{await navigator.clipboard.writeText(t);$("#copyBib").textContent="Copied"}catch(e){const r=document.createRange();r.selectNodeContents($("#bib"));const s=getSelection();s.removeAllRanges();s.addRange(r);$("#copyBib").textContent="Selected, press Ctrl+C"}setTimeout(()=>$("#copyBib").textContent="Copy",2200)};
+
+/* redraw charts when the theme changes */
+const mq=matchMedia("(prefers-color-scheme: dark)");const redraw=()=>{resChart();fsChart();abChart()};
+mq.addEventListener?mq.addEventListener("change",redraw):0;
+new MutationObserver(redraw).observe(document.documentElement,{attributes:true,attributeFilter:["data-theme"]});
+})();
+</script>
+
+</body>
+</html>

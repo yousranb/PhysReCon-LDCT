@@ -1,0 +1,9 @@
+cff-version: 1.2.0
+message: "If you use this code, please cite the paper below."
+title: "PhysReCon-LDCT: Physics-Grounded Multiscale Degradation Learning for Few-Shot Adaptive Low-Dose CT Synthesis"
+authors:
+  - family-names: Taifour
+    given-names: Yousra
+    affiliation: "L2TI, Université Sorbonne Paris Nord"
+type: software
+repository-code: "https://github.com/your-github-username/PhysReCon-LDCT"

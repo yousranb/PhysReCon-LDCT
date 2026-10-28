@@ -1,0 +1,18 @@
+# PhysReCon-LDCT and the GAN/VAE baselines
+torch>=2.1
+numpy
+scipy
+scikit-image
+pandas
+matplotlib
+pydicom
+nibabel
+SimpleITK
+lpips
+piq
+# PhysHVS-LDCT baseline only (train_cadm.py); tested with diffusers 0.41, peft 0.21, transformers 5.19
+diffusers>=0.27
+peft>=0.10
+transformers>=4.38
+accelerate
+huggingface_hub
