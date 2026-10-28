@@ -4,7 +4,7 @@
 
 Yousra Taifour — L2TI, Université Sorbonne Paris Nord
 
-[Project page](https://your-github-username.github.io/PhysReCon-LDCT/) · Paper (ISBI, under review) · [Architecture (PDF)](figures/PhysReCon_arch_detailed.pdf)
+[Project page](https://yousranb.github.io/PhysReCon-LDCT/) · Paper (ISBI, under review) · [Architecture (PDF)](figures/PhysReCon_arch_detailed.pdf)
 
 ![PhysReCon-LDCT architecture](figures/PhysReCon_arch_detailed.png)
 
@@ -79,7 +79,7 @@ figures/                 architecture and qualitative figures
 ## Installation
 
 ```bash
-git clone https://github.com/your-github-username/PhysReCon-LDCT.git
+git clone https://github.com/yousranb/PhysReCon-LDCT.git
 cd PhysReCon-LDCT
 python -m venv .venv && source .venv/bin/activate    # or a conda environment
 pip install -r requirements.txt
